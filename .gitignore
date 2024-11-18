@@ -1,1 +1,3 @@
 venv_shorturl
+__pycache__/models.cpython-38.pyc
+db/shorturl.db
