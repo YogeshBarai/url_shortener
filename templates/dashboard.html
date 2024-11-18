@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
+</head>
+<body>
+    <h1>Welcome, {{ current_user.username }}</h1>
+    <a href="{{ url_for('logout') }}">Logout</a>
+    <h2>Your Shortened URLs:</h2>
+    <ul>
+        {% for url in urls %}
+        <li><a href="{{ url.short_url }}">{{ url.short_url }}</a>: {{ url.long_url }}</li>
+        {% endfor %}
+    </ul>
+</body>
+</html>

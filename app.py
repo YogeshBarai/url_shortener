@@ -2,8 +2,11 @@ from flask import Flask, render_template, redirect, url_for, request, flash
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-from models import db, User, URL
+from models import db, User, URL, VisitorCount
 import os
+from datetime import datetime
+import random
+import string
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 DB_PATH = os.path.join(BASE_DIR, 'db', 'shorturl.db')
@@ -13,14 +16,16 @@ app = Flask(__name__)
 if not os.path.exists(os.path.join(BASE_DIR, 'db')):
     os.makedirs(os.path.join(BASE_DIR, 'db'))
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DB_PATH}'
-db.init_app(app)
+app.secret_key = os.urandom(24)
 
+db.init_app(app)
 with app.app_context():
     db.create_all()
 
 login_manager = LoginManager()
 login_manager.login_view = "login"
 login_manager.init_app(app)
+
 
 @login_manager.user_loader
 def load_user(user_id):
@@ -70,22 +75,50 @@ def logout():
 
 @app.route('/', methods=['GET', 'POST'])
 def index():
+    # Initialize the visitor counter if it doesn't exist
+    visitor = VisitorCount.query.first()
+    if visitor is None:
+        visitor = VisitorCount(count=0)
+        db.session.add(visitor)
+        db.session.commit()
+
+    # Increment the visitor count
+    visitor.count += 1
+    db.session.commit()
+
+    # Get the total number of URLs shortened
+    total_urls = URL.query.count()
+
     if request.method == 'POST':
-        if not current_user.is_authenticated:
-            flash("Please log in to shorten URLs.", "danger")
-            return redirect(url_for('login'))
         long_url = request.form['long_url']
         short_url = ''.join(random.choices(string.ascii_letters + string.digits, k=6))
-        url = URL(long_url=long_url, short_url=short_url, user_id=current_user.id)
+
+        # Check if the user is logged in
+        if current_user.is_authenticated:
+            # Save with associated user ID
+            url = URL(long_url=long_url, short_url=short_url, user_id=current_user.id)
+        else:
+            # Save without a user ID for anonymous users
+            url = URL(long_url=long_url, short_url=short_url)
+
         db.session.add(url)
         db.session.commit()
+
         flash(f"Short URL: {request.host_url}{short_url}", "success")
-    return render_template('index.html')
+
+    return render_template('index.html', visitor_count=visitor.count, total_urls=total_urls)
+
 
 @app.route('/<short_url>')
 def redirect_url(short_url):
     url = URL.query.filter_by(short_url=short_url).first_or_404()
     return redirect(url.long_url)
+
+
+@app.context_processor
+def inject_year():
+    return {'current_year': datetime.now().year}
+
 
 if __name__ == '__main__':
     app.run(debug=True)
